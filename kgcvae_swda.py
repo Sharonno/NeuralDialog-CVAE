@@ -10,6 +10,7 @@ from beeprint import pp
 from config_utils import KgCVAEConfig as Config
 from data_apis.corpus import SWDADialogCorpus
 from data_apis.data_utils import SWDADataLoader
+from data_apis.data import Corpus
 from models.cvae import KgRnnCVAE
 
 # constants
@@ -18,9 +19,14 @@ tf.app.flags.DEFINE_string("data_dir", "data/full_swda_clean_42da_sentiment_dial
 tf.app.flags.DEFINE_string("work_dir", "working", "Experiment results directory.")
 tf.app.flags.DEFINE_bool("equal_batch", True, "Make each batch has similar length.")
 tf.app.flags.DEFINE_bool("resume", False, "Resume from previous")
-tf.app.flags.DEFINE_bool("forward_only", False, "Only do decoding")
+tf.app.flags.DEFINE_bool("forward_only", True, "Only do decoding")
 tf.app.flags.DEFINE_bool("save_model", True, "Create checkpoints")
-tf.app.flags.DEFINE_string("test_path", "run1500783422", "the dir to load checkpoint for forward only")
+tf.app.flags.DEFINE_string("test_path", "run1566524850", "the dir to load checkpoint for forward only")
+tf.app.flags.DEFINE_string("vocab", "data/vocab.pkl", "vocab")
+tf.app.flags.DEFINE_string("da_vocab", "data/dialog_act_vocab.pkl", "da")
+tf.app.flags.DEFINE_string("topic_vocab", "data/topic_vocab.pkl", "topick")
+tf.app.flags.DEFINE_bool("demo", True, "input and output in terminal")
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -47,7 +53,13 @@ def main():
     dial_corpus = api.get_dialog_corpus()
     meta_corpus = api.get_meta_corpus()
 
+    '''item in meta like:
+     ([0.46, 0.6666666666666666, 1, 0], [0.48, 0.6666666666666666, 1, 0], 29)
+    '''
     train_meta, valid_meta, test_meta = meta_corpus.get("train"), meta_corpus.get("valid"), meta_corpus.get("test")
+    '''item in dial
+    ([utt_id,], spearker_id, [dialogact_id, [,,,]])
+    '''
     train_dial, valid_dial, test_dial = dial_corpus.get("train"), dial_corpus.get("valid"), dial_corpus.get("test")
 
     # convert to numeric input outputs that fits into TF models
@@ -140,7 +152,7 @@ def main():
                     break
             print("Best validation loss %f" % best_dev_loss)
             print("Done training")
-        else:
+        elif not FLAGS.demo:
             # begin validation
             # begin validation
             valid_feed.epoch_init(valid_config.batch_size, valid_config.backward_size,
@@ -156,7 +168,29 @@ def main():
                                  test_config.step_size, shuffle=False, intra_shuffle=False)
             test_model.test(sess, test_feed, num_batch=None, repeat=10, dest=dest_f)
             dest_f.close()
-
+        else:
+            infer_api = Corpus(FLAGS.vocab, FLAGS.da_vocab, FLAGS.topic_vocab)
+            while(1):
+                demo_sent = raw_input('Please input your sentence:\t')
+                if demo_sent == '' or demo_sent.isspace():
+                    print('See you next time!')
+                    break
+                speaker = raw_input('Are you speaker A?: 1 or 0\t')
+                topic = raw_input('what is your topic:\t')
+                # demo_sent = 'Hello'
+                # speaker = '1'
+                # topic = 'MUSIC'
+                meta, dial = infer_api.format_input(demo_sent, speaker, topic)
+                infer_feed = SWDADataLoader("Infer", dial, meta, config)
+                infer_feed.epoch_init(test_config.batch_size, test_config.backward_size,
+                                 test_config.step_size, shuffle=False, intra_shuffle=False)
+                pred_strs, pred_das = test_model.inference(sess, infer_feed, num_batch=None, repeat=3)
+                if pred_strs and pred_das:
+                    print('Here is your answer')
+                    for da, answer in zip(pred_strs, pred_das):
+                        print('{} >> {}'.format(da, answer))
+            
+            
 if __name__ == "__main__":
     if FLAGS.forward_only:
         if FLAGS.test_path is None:

@@ -22,7 +22,7 @@ class LongDataLoader(object):
     def _shuffle_batch_indexes(self):
         np.random.shuffle(self.batch_indexes)
 
-    def _prepare_batch(self, cur_grid, prev_grid):
+    def _prepare_batch(self, cur_grid, prev_grid, infer=False):
         raise NotImplementedError("Have to override prepare batch")
 
     def epoch_init(self, batch_size, backward_size, step_size, shuffle=True, intra_shuffle=True):
@@ -31,6 +31,8 @@ class LongDataLoader(object):
         self.ptr = 0
         self.batch_size = batch_size
         self.backward_size = backward_size
+        # self.backward_size = backward_size
+        self.backward_size = 0
         self.step_size = step_size
         self.prev_alive_size = batch_size
 
@@ -74,7 +76,7 @@ class LongDataLoader(object):
         self.num_batch = len(self.grid_indexes)
         print("%s begins with %d batches with %d left over samples" % (self.name, self.num_batch, left_over))
 
-    def next_batch(self):
+    def next_batch(self, infer=False):
         if self.ptr < self.num_batch:
             current_grid = self.grid_indexes[self.ptr]
             if self.ptr > 0:
@@ -82,7 +84,7 @@ class LongDataLoader(object):
             else:
                 prev_grid = None
             self.ptr += 1
-            return self._prepare_batch(cur_grid=current_grid, prev_grid=prev_grid)
+            return self._prepare_batch(cur_grid=current_grid, prev_grid=prev_grid, infer=infer)
         else:
             return None
 
@@ -109,7 +111,7 @@ class SWDADataLoader(LongDataLoader):
         else:
             return tokens
 
-    def _prepare_batch(self, cur_grid, prev_grid):
+    def _prepare_batch(self, cur_grid, prev_grid, infer=False):
         # the batch index, the starting point and end point for segment
         b_id, s_id, e_id = cur_grid
 
@@ -125,38 +127,52 @@ class SWDADataLoader(LongDataLoader):
         context_lens, context_utts, floors, out_utts, out_lens, out_floors, out_das = [], [], [], [], [], [], []
         for row in rows:
             if s_id < len(row)-1:
-                cut_row = row[s_id:e_id]
-                in_row = cut_row[0:-1]
-                out_row = cut_row[-1]
-                out_utt, out_floor, out_feat = out_row
+                if infer:
+                    in_row = cut_row = row
+                    my_profiles = np.array([meta[1] for idx, meta in enumerate(meta_rows)])
+                    ot_profiles = np.array([meta[0] for idx, meta in enumerate(meta_rows)])
+                    context_lens.append(len(cut_row))
+                    floors.append([int(floor) for utt, floor, feat in in_row])
+                else:
+                    cut_row = row[s_id:e_id]
+                    in_row = cut_row[0:-1]
+                    out_row = cut_row[-1]
+                    out_utt, out_floor, out_feat = out_row
+
+                    out_utt = self.pad_to(out_utt, do_pad=False)
+                    out_utts.append(out_utt)
+                    out_lens.append(len(out_utt))
+                    out_floors.append(out_floor)
+                    out_das.append(out_feat[0])
+                    my_profiles = np.array([meta[out_floors[idx]] for idx, meta in enumerate(meta_rows)])
+                    ot_profiles = np.array([meta[1-out_floors[idx]] for idx, meta in enumerate(meta_rows)])
+                    context_lens.append(len(cut_row) - 1)
+                    floors.append([int(floor==out_floor) for utt, floor, feat in in_row])
 
                 context_utts.append([self.pad_to(utt) for utt, floor, feat in in_row])
-                floors.append([int(floor==out_floor) for utt, floor, feat in in_row])
-                context_lens.append(len(cut_row) - 1)
 
-                out_utt = self.pad_to(out_utt, do_pad=False)
-                out_utts.append(out_utt)
-                out_lens.append(len(out_utt))
-                out_floors.append(out_floor)
-                out_das.append(out_feat[0])
             else:
                 print(row)
                 raise ValueError("S_ID %d larger than row" % s_id)
 
-        # my_profiles = np.array([meta[out_floors[idx]] + [cur_pos[idx]] for idx, meta in enumerate(meta_rows)])
-        my_profiles = np.array([meta[out_floors[idx]] for idx, meta in enumerate(meta_rows)])
-        ot_profiles = np.array([meta[1-out_floors[idx]] for idx, meta in enumerate(meta_rows)])
         vec_context_lens = np.array(context_lens)
+        # print(self.batch_size, vec_context_lens, self.max_utt_size, '111111111111')
         vec_context = np.zeros((self.batch_size, np.max(vec_context_lens), self.max_utt_size), dtype=np.int32)
         vec_floors = np.zeros((self.batch_size, np.max(vec_context_lens)), dtype=np.int32)
-        vec_outs = np.zeros((self.batch_size, np.max(out_lens)), dtype=np.int32)
-        vec_out_lens = np.array(out_lens)
-        vec_out_das = np.array(out_das)
 
-        for b_id in range(self.batch_size):
-            vec_outs[b_id, 0:vec_out_lens[b_id]] = out_utts[b_id]
-            vec_floors[b_id, 0:vec_context_lens[b_id]] = floors[b_id]
-            vec_context[b_id, 0:vec_context_lens[b_id], :] = np.array(context_utts[b_id])
+        if not infer:
+            vec_outs = np.zeros((self.batch_size, np.max(out_lens)), dtype=np.int32)
+            vec_out_lens = np.array(out_lens)
+            vec_out_das = np.array(out_das)
+            for b_id in range(self.batch_size):
+                vec_outs[b_id, 0:vec_out_lens[b_id]] = out_utts[b_id]
+                vec_floors[b_id, 0:vec_context_lens[b_id]] = floors[b_id]
+                vec_context[b_id, 0:vec_context_lens[b_id], :] = np.array(context_utts[b_id])
+        else:
+            vec_outs = np.zeros((self.batch_size, 10), dtype=np.int32)
+            vec_out_lens = np.array([10])
+            vec_out_das = np.array([0])
+        # print vec_context, vec_context_lens, vec_floors, topics, my_profiles, ot_profiles, vec_outs, vec_out_lens, vec_out_das
 
         return vec_context, vec_context_lens, vec_floors, topics, my_profiles, ot_profiles, vec_outs, vec_out_lens, vec_out_das
 

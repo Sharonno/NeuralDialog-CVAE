@@ -399,13 +399,13 @@ class KgRnnCVAE(BaseTFModel):
 
         self.saver = tf.train.Saver(tf.global_variables(), write_version=tf.train.SaverDef.V2)
 
-    def batch_2_feed(self, batch, global_t, use_prior, repeat=1):
+    def batch_2_feed(self, batch, global_t, use_prior, repeat=1, infere=False):
         context, context_lens, floors, topics, my_profiles, ot_profiles, outputs, output_lens, output_das = batch
         feed_dict = {self.input_contexts: context, self.context_lens:context_lens,
                      self.floors: floors, self.topics:topics, self.my_profile: my_profiles,
-                     self.ot_profile: ot_profiles, self.output_tokens: outputs,
-                     self.output_das: output_das, self.output_lens: output_lens,
-                     self.use_prior: use_prior}
+                     self.ot_profile: ot_profiles, self.use_prior: use_prior}
+        if not infere:
+            feed_dict.update({self.output_tokens: outputs, self.output_das: output_das, self.output_lens: output_lens})
         if repeat > 1:
             tiled_feed_dict = {}
             for key, val in feed_dict.items():
@@ -553,4 +553,39 @@ class KgRnnCVAE(BaseTFModel):
         dest.write(report + "\n")
         print("Done testing")
 
+    def inference(self, sess, infer_feed, num_batch=None, repeat=5):
+        """
+        Return:
+            pred_das, pred_strs: list, list
+        """
+        pred_das, pred_strs = [], []
+
+        local_t = 0
+        batch = infer_feed.next_batch(infer=True)
+        if batch is None or (num_batch is not None and local_t > num_batch):
+            # print('hello world: batch: {} num_batch:{} local_t: {} num_batch: {}'.format(batch, num_batch, local_t, local_t > num_batch) )
+            return pred_das, pred_strs
+        feed_dict = self.batch_2_feed(batch, None, use_prior=True, repeat=repeat)
+        word_outs, da_logits = sess.run([self.dec_out_words, self.da_logits], feed_dict)
+        sample_words = np.split(word_outs, repeat, axis=0)
+        sample_das = np.split(da_logits, repeat, axis=0)
+
+        true_floor = feed_dict[self.floors]
+        true_srcs = feed_dict[self.input_contexts]
+        true_src_lens = feed_dict[self.context_lens]
+        local_t += 1
+        for b_id in range(infer_feed.batch_size):
+            # start = np.maximum(0, true_src_lens[b_id]-5)
+            # for t_id in range(start, true_srcs.shape[1], 1):
+            #     src_str = " ".join([self.vocab[e] for e in true_srcs[b_id, t_id].tolist() if e != 0])
+            #     print("Src %d-%d: %s\n" % (t_id, true_floor[b_id, t_id], src_str))
+            for r_id in range(repeat):
+                pred_outs = sample_words[r_id]
+                pred_da = np.argmax(sample_das[r_id], axis=1)[0]
+                pred_tokens = [self.vocab[e] for e in pred_outs[b_id].tolist() if e != self.eos_id and e != 0]
+                pred_str = " ".join(pred_tokens).replace(" ' ", "'")
+                pred_das.append(self.da_vocab[pred_da])
+                pred_strs.append(pred_str)
+                print("Sample %d (%s) >> %s\n" % (r_id, self.da_vocab[pred_da], pred_str))
+        return pred_das, pred_strs
 

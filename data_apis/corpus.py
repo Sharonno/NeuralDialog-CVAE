@@ -33,6 +33,10 @@ class SWDADialogCorpus(object):
     def process(self, data):
         """new_dialog: [(a, 1/0), (a,1/0)], new_meta: (a, b, topic), new_utt: [[a,b,c)"""
         """ 1 is own utt and 0 is other's utt"""
+        """
+        Args:
+            data: list of dict
+        """
         new_dialog = []
         new_meta = []
         new_utts = []
@@ -62,6 +66,11 @@ class SWDADialogCorpus(object):
         print("Max utt len %d, mean utt len %.2f" % (np.max(all_lenes), float(np.mean(all_lenes))))
         return new_dialog, new_meta, new_utts
 
+    @staticmethod
+    def _write_to_pkl(data, fn):
+        with open(fn, 'wb') as fw:
+            pkl.dump(data, fw)
+
     def build_vocab(self, max_vocab_cnt):
         all_words = []
         for tokens in self.train_corpus[self.utt_id]:
@@ -79,6 +88,7 @@ class SWDADialogCorpus(object):
 
         self.vocab = ["<pad>", "<unk>"] + [t for t, cnt in vocab_count]
         self.rev_vocab = {t: idx for idx, t in enumerate(self.vocab)}
+        # self._write_to_pkl(self.rev_vocab, './data/vocab.pkl')
         self.unk_id = self.rev_vocab["<unk>"]
         print("<d> index %d" % self.rev_vocab["<d>"])
         print("<sil> index %d" % self.rev_vocab.get("<sil>", -1))
@@ -89,6 +99,7 @@ class SWDADialogCorpus(object):
             all_topics.append(topic)
         self.topic_vocab = [t for t, cnt in Counter(all_topics).most_common()]
         self.rev_topic_vocab = {t: idx for idx, t in enumerate(self.topic_vocab)}
+        # self._write_to_pkl(self.rev_topic_vocab, './data/topic_vocab.pkl')
         print("%d topics in train data" % len(self.topic_vocab))
 
         # get dialog act labels
@@ -97,7 +108,7 @@ class SWDADialogCorpus(object):
             all_dialog_acts.extend([feat[self.dialog_act_id] for caller, utt, feat in dialog if feat is not None])
         self.dialog_act_vocab = [t for t, cnt in Counter(all_dialog_acts).most_common()]
         self.rev_dialog_act_vocab = {t: idx for idx, t in enumerate(self.dialog_act_vocab)}
-        print(self.dialog_act_vocab)
+        # self._write_to_pkl(self.rev_dialog_act_vocab, './data/dialog_act_vocab.pkl')
         print("%d dialog acts in train data" % len(self.dialog_act_vocab))
 
     def load_word2vec(self):
@@ -134,6 +145,20 @@ class SWDADialogCorpus(object):
         id_test = _to_id_corpus(self.test_corpus[self.utt_id])
         return {'train': id_train, 'valid': id_valid, 'test': id_test}
 
+    def to_id_corpus(seqs, str_id_mapper):
+        """
+        Args:
+            seqs: list of list
+            str_id_mapper: dict
+        Return:
+            id_seqs: list of list
+        """
+        id_seqs = list()
+        for seq in seqs:
+            temp = [str_id_mapper.get(token, 0) for token in seq]
+            id_seqs.append(temp)
+        return id_seqs
+                    
     def get_dialog_corpus(self):
         def _to_id_corpus(data):
             results = []
