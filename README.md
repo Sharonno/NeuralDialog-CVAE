@@ -4,19 +4,6 @@ We provide a TensorFlow implementation of the CVAE-based dialog model described 
 **Learning Discourse-level Diversity for Neural Dialog Models using Conditional Variational Autoencoders**, published as a long paper in ACL 2017.
 See the [paper](https://arxiv.org/abs/1703.10960) for more details.
 
-## References 
-If you use any source codes or datasets included in this toolkit in your
-work, please cite the following paper. The bibtex are listed below:
- 
-    [Zhao et al, 2017]:
-     @inproceedings{zhao2017learning,
-       title={Learning Discourse-level Diversity for Neural Dialog Models using Conditional Variational Autoencoders},
-       author={Zhao, Tiancheng and Zhao, Ran and Eskenazi, Maxine},
-       booktitle={Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
-       volume={1},
-       pages={654--664},
-       year={2017}
-     }
 
 ## External Implementation
 The baseline method HRED using the same SwitchBoard dataset is also implemented on **Texar**, a general-purpose text generation toolkit. Checkout [here](https://github.com/asyml/texar/tree/master/examples/hierarchical_dialog).
@@ -30,6 +17,8 @@ The baseline method HRED using the same SwitchBoard dataset is also implemented 
  - You may need to pip install beeprint if the module is missing
 
 ## Usage
+
+
 ## Train a new model
     python kgcvae_swda.py
 will run default training and save model to ./working
@@ -43,6 +32,79 @@ Then you can run the model by:
 
     python kgcvae_swda.py
 The outputs will be printed to stdout and generated responses will be saved at test.txt in the test_path.
+
+## Inference
+Do as you did in Testing, then set `demo: False -> True` at the top 
+
+You're required to say something. You can choose your topic from below:
+```
+TV PROGRAMS
+UNIVERSAL PBLIC SERV
+BASEBALL
+FAMILY REUNIONS
+TAXES
+SVGS & LOAN BAILOUT
+PAINTING
+CHOOSING A COLLEGE
+COMPUTERS
+CAMPING
+BUYING A CAR
+PUERTO RICAN STTEHD
+ELECTIONS AND VOTING
+MAGAZINES
+WOODWORKING
+CHILD CARE
+HOUSES
+TRIAL BY JURY
+EXERCISE AND FITNESS
+METRIC SYSTEM
+IMMIGRATION
+RECIPES/FOOD/COOKING
+JOB BENEFITS
+HOBBIES AND CRAFTS
+FAMILY LIFE
+AIDS
+SOCIAL CHANGE
+UNIVERSAL HEALTH INS
+DRUG TESTING
+WEATHER CLIMATE
+SOVIET UNION
+CLOTHING AND DRESS
+FEDERAL BUDGET
+CARE OF THE ELDERLY
+CONSUMER GOODS
+WOMEN'S ROLES
+BASKETBALL
+CREDIT CARD USE
+GARDENING
+CRIME
+HOME REPAIRS
+MUSIC
+BOATING AND SAILING
+BOOKS AND LITERATURE
+GUN CONTROL
+RIGHT TO PRIVACY
+NEWS MEDIA
+POLITICS
+AIR POLLUTION
+FAMILY FINANCE
+SPACE FLIGHT AND EXPLORATION
+CAPITAL PUNISHMENT
+MIDDLE EAST
+MOVIES
+VACATION SPOTS
+LATIN AMERICA
+RESTAURANTS
+RECYCLING
+ETHICS IN GOVERNMENT
+FISHING
+PETS
+GOLF
+AUTO REPAIRS
+VIETNAM WAR
+PUBLIC EDUCATION
+FOOTBALL
+```
 
 ## Use pre-trained Word2vec
 Download Glove word embeddings from https://nlp.stanford.edu/projects/glove/
